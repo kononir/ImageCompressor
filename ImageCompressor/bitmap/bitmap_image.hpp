@@ -1550,7 +1550,7 @@ private:
          return;
       }
 
-      if (bih.size != bih.struct_size())
+      /*if (bih.size != bih.struct_size())
       {
          bfh.clear();
          bih.clear();
@@ -1560,7 +1560,7 @@ private:
          std::cerr << "bitmap_image::load_bitmap() ERROR: bitmap_image - Invalid BIH size " << bih.size << " expected " << bih.struct_size() << std::endl;
 
          return;
-      }
+      }*/
 
       width_  = bih.width;
       height_ = bih.height;
@@ -1577,7 +1577,7 @@ private:
                                          bih.struct_size()                    +
                                          bfh.struct_size()                    ;
 
-      if (bitmap_file_size != bitmap_logical_size)
+      /*if (bitmap_file_size != bitmap_logical_size)
       {
          bfh.clear();
          bih.clear();
@@ -1589,7 +1589,7 @@ private:
                       "Physical: " << bitmap_file_size    << std::endl;
 
          return;
-      }
+      }*/
 
       create_bitmap();
 
