@@ -8,26 +8,27 @@ using namespace std;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	string fileName;
+	string filePath;
 	int rectHeight, rectWidth, overlap;
 
 	NeuralNetwork neuralNetwork;
 
-	cout << "Input file name: " << endl;
-	getline(cin, fileName, '\n');
+	cout << "Input file path: " << endl;
+	getline(cin, filePath, '\n');
 
-	wstring widestr = wstring(fileName.begin(), fileName.end());
-	const wchar_t *fileName_t = widestr.c_str();
+	wstring widestr = wstring(filePath.begin(), filePath.end());
+	const wchar_t *filePath_t = widestr.c_str();
 
 	CImage image;
-	image.Load(fileName_t);
 
-	if (!image) {
-      cout << "Error - Failed to open: " + fileName << endl;
+	if (image.Load(filePath_t) == E_FAIL) {
+      cout << "Error - Failed to open: " + filePath << endl;
 
 	  system("pause");
       return 1;
     }
+
+	//image.Save(_T("D:\\file.bmp"));
 
 	cout << "Input rectangle width: ";
 	cin >> rectWidth;
@@ -50,53 +51,75 @@ int _tmain(int argc, _TCHAR* argv[])
 	cout << "Input maximum allowable error (0 < e <= 0.1 * p, a <= е): ";
 	cin >> neuralNetwork.maximumAllowableError;
 
+	neuralNetwork.trainingSample = sliceImage(image, rectWidth, rectHeight, overlap);
+	neuralNetwork.imagerysNumber = image.GetWidth() * image.GetHeight() / rectWidth / rectHeight;
 	neuralNetwork.firstLayerNeuronsNumber = rectWidth * rectHeight * COLORS_NUMBER;
 
-	neuralNetwork.trainingSample = sliceImage(image, rectWidth, rectHeight, overlap);
-
 	trainNeuralNetwork(neuralNetwork);
+
+	double** decompressedImageRectangles = compressAndDecompressImageRectangles(neuralNetwork);
+
+	CImage &decompressedImage = createDecompressedImage(decompressedImageRectangles, image.GetHeight(), image.GetWidth(), rectWidth, rectHeight, overlap, image.GetBPP());
+
+	if (decompressedImage.IsNull() || !decompressedImage.IsDIBSection()) {
+		cout << "Error - Image isn't drow" << endl;
+	}
+
+	if (decompressedImage.Save(_T("D:\\decompresedImage.bmp")) == E_FAIL) {
+      cout << "Error - Failed to save decompresed file" << endl;
+
+	  system("pause");
+      return 1;
+    }
 
 	system("pause");
 	return 0;
 }
 
 
-vector<Matrix> sliceImage(CImage image, int rectWidth, int rectHeight, int overlap) {
-	vector<Matrix> trainingSample;
+double** sliceImage(CImage image, int rectWidth, int rectHeight, int overlap) {
+	int imageWidth = (int) image.GetWidth();
+	int imageHeight = (int) image.GetHeight();
 
-	for (int currRectX = 0; currRectX < (int) image.GetHeight(); currRectX += rectWidth) {
-		if ((int) image.GetWidth() - currRectX - 1 < rectWidth) {
+	int imagerysNumber = imageWidth * imageHeight / rectWidth / rectHeight;
+
+	double** trainingSample = new double*[imagerysNumber];
+	int currImageryIndex = 0;
+
+	for (int currRectX = 0; currRectX < imageWidth; currRectX += rectWidth) {
+		if (imageWidth - currRectX - 1 < rectWidth) {
 			currRectX -= overlap;
 		}
 
-		for (int currRectY = 0; currRectY < (int) image.GetHeight(); currRectY += rectHeight) {
-			if ((int) image.GetHeight() - currRectY - 1 < rectHeight) {
+		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight, currImageryIndex++) {
+			if (imageHeight - currRectY - 1 < rectHeight) {
 				currRectY -= overlap;
 			}
 
-			Matrix imagery(ONE_DIMENSIONAL);
+			int imageryComponentsNumber = rectWidth * rectHeight * COLORS_NUMBER;
+			trainingSample[currImageryIndex] = new double[imageryComponentsNumber];
+
+			int currImageryComponentIndex = 0;
 
 			// Цикл для создания эталонного вектора и преобразования его компонент для дальнейшей обработки 
-			for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {
-
-				for (int currPixelX = currRectX; currPixelX < currRectX + rectWidth; currPixelX++) {
+			for (int currPixelX = currRectX; currPixelX < currRectX + rectWidth; currPixelX++) {
+				
+				for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {
 					COLORREF color = image.GetPixel(currPixelX, currPixelY);
 
-					double red = (double) GetRValue(color);
-					double green = (double) GetGValue(color);
-					double blue = (double) GetBValue(color);
+					int pixelRedValue = GetRValue(color);
+					int pixelGreenValue = GetGValue(color);
+					int pixelBlueValue = GetBValue(color);
 
-					double transformedPixelRedValue = (2 * red / (double) PIXEL_COLOR_MAX_VALUE) - 1;
-					double transformedPixelGreenValue = (2 * green / (double) PIXEL_COLOR_MAX_VALUE) - 1;
-					double transformedPixelBlueValue = (2 * blue / (double) PIXEL_COLOR_MAX_VALUE) - 1;
+					double transformedPixelRedValue = (2 * pixelRedValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
+					double transformedpixelGreenValue = (2 * pixelGreenValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
+					double transformedpixelBlueValue = (2 * pixelBlueValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
 
-					imagery[VECTOR_ROW].push_back(transformedPixelRedValue);
-					imagery[VECTOR_ROW].push_back(transformedPixelGreenValue); 
-					imagery[VECTOR_ROW].push_back(transformedPixelBlueValue); 
+					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedPixelRedValue;
+					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedpixelGreenValue;
+					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedpixelBlueValue;
 				}
 			}
-
-			trainingSample.push_back(imagery);
 		}
 	}
 
@@ -104,49 +127,15 @@ vector<Matrix> sliceImage(CImage image, int rectWidth, int rectHeight, int overl
 }
 
 
-Matrix makeMatrixWithRandomValues(int rowNumber, int colNumber)
-{
-	double minWeight = -1.0;
-	double maxWeight = 1.0;
-
-	srand((unsigned int) time(0));
-
-	Matrix matrix(rowNumber);
-
-	for (int currRowNumber = 0; currRowNumber < rowNumber; currRowNumber++) {
-
-		for (int currColNumber = 0; currColNumber < colNumber; currColNumber++) {
-			matrix[currRowNumber].push_back((((double) rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight);
-		}
-	}
-
-	return matrix;
-}
-
-
-Matrix transposeMatrix(Matrix transposableMatrix)
-{
-	int colNumber = transposableMatrix.size();
-	int rowNumber = transposableMatrix.front().size();
-
-	Matrix matrix(rowNumber);
-
-	for (int currRowNumber = 0; currRowNumber < rowNumber; currRowNumber++) {
-
-		for (int currColNumber = 0; currColNumber < colNumber; currColNumber++) {
-			matrix[currRowNumber].push_back(transposableMatrix[currColNumber][currRowNumber]);
-		}
-	}
-
-	return matrix;
-}
-
-
 void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
-	vector<Matrix> &q = neuralNetwork.trainingSample;
-	Matrix &W = neuralNetwork.currFirstLayerWeightMatrix;
-	Matrix &Ws = neuralNetwork.currSecondLayerWeightMatrix;
+	double** q = neuralNetwork.trainingSample;
+	double** W = NULL;
+	double** Ws = NULL;
 
+	double* Yi;
+	double* Xdi;
+
+	int imagerysNumber = neuralNetwork.imagerysNumber;
 	int N = neuralNetwork.firstLayerNeuronsNumber;
 	int p = neuralNetwork.secondLayerNeuronsNumber;
 
@@ -155,22 +144,44 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 	double e = neuralNetwork.maximumAllowableError;
 	double eForAverage = 2 * e;
 
-	double RMSEforTrainingSample;
+	long double RMSEforTrainingSample;
+
+	srand((unsigned int) time(0));
 
 	do {
 		RMSEforTrainingSample = 0;
 
-		for (int currImageryIndex = 0; currImageryIndex < (int) q.size(); currImageryIndex++) {
-			Matrix &Xi = neuralNetwork.trainingSample[currImageryIndex];
-			Matrix &Yi = neuralNetwork.prevCompressedRezult;
-			Matrix &Xdi = neuralNetwork.prevRezultDelta;
+		for (int currImageryIndex = 0; currImageryIndex < imagerysNumber; currImageryIndex++) {
+			double* Xi = neuralNetwork.trainingSample[currImageryIndex];
 
-			boolean isFirstStep = Yi.empty();
+			boolean isFirstStep = (W == NULL && Ws == NULL);
 
 			if (isFirstStep) {
-				W = makeMatrixWithRandomValues(N, p); //можно совместить
+				/*
+				W = makeMatrixWithRandomValues(N, p);
 				Ws = transposeMatrix(W);
+				*/
+
+				double minWeight = -1;
+				double maxWeight = 1;
+
+				W = new double*[N];
+				Ws = new double*[p];
+
+				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+					W[currRowNumber] = new double[p];
+					
+					for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+						if (currRowNumber == 0) {
+							Ws[currColNumber] = new double[N];
+						}
+
+						W[currRowNumber][currColNumber] = Ws[currColNumber][currRowNumber] 
+							= (((double) rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight;
+					}
+				}
 			} else {
+				/*
 				Matrix &YiT = transposeMatrix(Yi);
 				Matrix &as_YiT = composeCoefficientAndMatrix(as, YiT);
 				Matrix &as_YiT_Xdi = composeMatrixes(as_YiT, Xdi);
@@ -182,82 +193,172 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 				Matrix &Xdi_WsT = composeMatrixes(Xdi, WsT);
 				Matrix &a_XiT_Xdi_WsT = composeMatrixes(a_XiT, Xdi_WsT);
 				W = subtractMatrixes(W, a_XiT_Xdi_WsT);
+				*/
+
+				int currXdiCompNumber = 0;
+
+				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+					for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+						for (int currWCompNumber = 0; currWCompNumber < N; currWCompNumber++) {
+							W[currRowNumber][currColNumber] -= a * Xi[currRowNumber] * Xdi[currWCompNumber] * Ws[currColNumber][currWCompNumber];
+						}
+					}
+				}
+
+				for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+					for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+						Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
+					}
+				}
 			}
 			
+			/*
 			Yi = composeMatrixes(Xi, W);
 			Matrix &Xis = composeMatrixes(Yi, Ws);
 			Xdi = subtractMatrixes(Xis, Xi);
+			*/
 
-			RMSEforTrainingSample += computeRMSEforRectangle(Xdi);
+			Yi = new double[p];
+
+			for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+				Yi[currColNumber] = 0;
+
+				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+					Yi[currColNumber] += Xi[currRowNumber] * W[currRowNumber][currColNumber];
+				}
+			}
+
+			Xdi = new double[N];
+
+			for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+				Xdi[currColNumber] = 0;
+
+				for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+					Xdi[currColNumber] += Yi[currRowNumber] * Ws[currRowNumber][currColNumber];
+				}
+
+				Xdi[currColNumber] -= Xi[currColNumber];
+
+				RMSEforTrainingSample += pow(Xdi[currColNumber], SQUARE);
+			}
+
+			//cout << RMSEforTrainingSample << endl;
 		}
+
+		//cout << RMSEforTrainingSample << endl;
+
 	} while (RMSEforTrainingSample > eForAverage);
+
+	neuralNetwork.currFirstLayerWeightMatrix = W;
+	neuralNetwork.currSecondLayerWeightMatrix = Ws;
 }
 
 
-Matrix composeMatrixes(Matrix firstMatrix, Matrix secondMatrix) {
-	int rezultMatrixRowNumber = firstMatrix.size();
-	int rezultMatrixColNumber = secondMatrix.front().size();
-	int summedElementsNumber = secondMatrix.size();
+double** compressAndDecompressImageRectangles(NeuralNetwork neuralNetwork) {
+	int imagerysNumber = neuralNetwork.imagerysNumber;
+	int N = neuralNetwork.firstLayerNeuronsNumber;
+	int p = neuralNetwork.secondLayerNeuronsNumber;
 
-	Matrix rezultMatrix(rezultMatrixRowNumber);
+	double** W = neuralNetwork.currFirstLayerWeightMatrix;
+	double** Ws = neuralNetwork.currSecondLayerWeightMatrix;
 
-	for (int currRowNumber = 0; currRowNumber < rezultMatrixRowNumber; currRowNumber++) {
+	double** decompressImageRectangles = new double*[imagerysNumber];
+	
+	for (int currImageryIndex = 0; currImageryIndex < imagerysNumber; currImageryIndex++) {
+		double* Xi = neuralNetwork.trainingSample[currImageryIndex];
 
-		for (int currColNumber = 0; currColNumber < rezultMatrixColNumber; currColNumber++) {
-			double beginValue = 0;
-			rezultMatrix[currRowNumber].push_back(beginValue);
+		double* Yi = new double[p];
 
-			for (int currSummedEl = 0; currSummedEl < summedElementsNumber; currSummedEl++) {
-				rezultMatrix[currRowNumber][currColNumber] += firstMatrix[currRowNumber][currSummedEl] * secondMatrix[currSummedEl][currColNumber];
+		for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+			Yi[currColNumber] = 0;
+
+			for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+				Yi[currColNumber] += Xi[currRowNumber] * W[currRowNumber][currColNumber];
+			}
+		}
+
+		decompressImageRectangles[currImageryIndex] = new double[N];
+
+		for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+			decompressImageRectangles[currImageryIndex][currColNumber] = 0;
+
+			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+				decompressImageRectangles[currImageryIndex][currColNumber] += Yi[currRowNumber] * Ws[currRowNumber][currColNumber];
 			}
 		}
 	}
 
-	return rezultMatrix;
+	return decompressImageRectangles;
 }
 
 
-Matrix subtractMatrixes(Matrix firstMatrix, Matrix secondMatrix) {
-	int rezultMatrixRowNumber = firstMatrix.size();
-	int rezultMatrixColNumber = firstMatrix.front().size();
+CImage createDecompressedImage(double** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap, int nBPP) {
+	CImage decompressedImage;
 
-	Matrix rezultMatrix(rezultMatrixRowNumber);
+	decompressedImage.Create(imageWidth, imageHeight, nBPP);
 
-	for (int currRowNumber = 0; currRowNumber < rezultMatrixRowNumber; currRowNumber++) {
+	int imagerysNumber = imageWidth * imageHeight / rectWidth / rectHeight;
 
-		for (int currColNumber = 0; currColNumber < rezultMatrixColNumber; currColNumber++) {
-			rezultMatrix[currRowNumber].push_back(firstMatrix[currRowNumber][currColNumber] - secondMatrix[currRowNumber][currColNumber]);
+	int currImageryIndex = 0;
+	
+	for (int currRectX = 0; currRectX < imageWidth; currRectX += rectWidth) {
+		if (imageWidth - currRectX - 1 < rectWidth) {
+			currRectX -= overlap;
+		}
+
+		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight, currImageryIndex++) {
+			if (imageHeight - currRectY - 1 < rectHeight) {
+				currRectY -= overlap;
+			}
+
+			int currImageryComponentIndex = 0;
+
+			for (int currPixelX = currRectX; currPixelX < currRectX + rectWidth; currPixelX++) {
+
+				for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {				
+					double transformedPixelRedValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
+					double transformedPixelGreenValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
+					double transformedPixelBlueValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
+
+					int red = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelRedValue + 1) / 2);
+					int green = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelGreenValue + 1) / 2);
+					int blue = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelBlueValue + 1) / 2);
+
+					if (red < PIXEL_COLOR_MIN_VALUE) {
+						red = PIXEL_COLOR_MIN_VALUE;
+					}
+
+					if (red > PIXEL_COLOR_MAX_VALUE) {
+						red = PIXEL_COLOR_MAX_VALUE;
+					}
+
+					if (green < PIXEL_COLOR_MIN_VALUE) {
+						green = PIXEL_COLOR_MIN_VALUE;
+					}
+
+					if (green > PIXEL_COLOR_MAX_VALUE) {
+						green = PIXEL_COLOR_MAX_VALUE;
+					}
+
+					if (blue < PIXEL_COLOR_MIN_VALUE) {
+						blue = PIXEL_COLOR_MIN_VALUE;
+					}
+
+					if (blue > PIXEL_COLOR_MAX_VALUE) {
+						blue = PIXEL_COLOR_MAX_VALUE;
+					}
+
+					COLORREF color = RGB(red, green, blue);
+
+					decompressedImage.SetPixel(currPixelX, currPixelY, color);
+
+					//cout << (int) GetRValue(decompressedImage.GetPixel(currPixelX, currPixelY)) << endl;
+
+					//cout << "X: " << currPixelX << "\tY: " << currPixelY << endl;
+				}
+			}
 		}
 	}
 
-	return rezultMatrix;
-}
-
-
-Matrix composeCoefficientAndMatrix(double coefficient, Matrix matrix) {
-	int rezultMatrixRowNumber = matrix.size();
-	int rezultMatrixColNumber = matrix.front().size();
-
-	Matrix rezultMatrix(rezultMatrixRowNumber);
-
-	for (int currRowNumber = 0; currRowNumber < rezultMatrixRowNumber; currRowNumber++) {
-
-		for (int currColNumber = 0; currColNumber < rezultMatrixColNumber; currColNumber++) {
-			rezultMatrix[currRowNumber].push_back(coefficient * matrix[currRowNumber][currColNumber]);
-		}
-	}
-
-	return rezultMatrix;
-}
-
-
-double computeRMSEforRectangle(Matrix deltaVectorX) {
-	double RMSE = 0;
-	int square = 2;
-
-	for (int currColNumber = 0; currColNumber < (int) deltaVectorX.front().size(); currColNumber++) {
-		RMSE += pow(deltaVectorX.front()[currColNumber], square);
-	}
-
-	return RMSE;
+	return decompressedImage;
 }

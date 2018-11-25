@@ -1,21 +1,2 @@
-﻿Построение начато 23.11.2018 19:52:19.
-     1>Проект "D:\My Programs\ImageCompressor\ImageCompressor\ImageCompressor.vcxproj" в узле 2 (целевые объекты build).
-     1>InitializeBuildStatus:
-         Создание "Debug\ImageCompressor.unsuccessfulbuild", так как было задано "AlwaysCreate".
-       ClCompile:
-         Для всех выходных данных обновления не требуется.
-         Для всех выходных данных обновления не требуется.
-       ManifestResourceCompile:
-         Для всех выходных данных обновления не требуется.
-       Link:
-         Для всех выходных данных обновления не требуется.
-       Manifest:
-         Для всех выходных данных обновления не требуется.
-       FinalizeBuildStatus:
-         Файл "Debug\ImageCompressor.unsuccessfulbuild" удаляется.
-         Обращение к "Debug\ImageCompressor.lastbuildstate".
-     1>Построение проекта "D:\My Programs\ImageCompressor\ImageCompressor\ImageCompressor.vcxproj" завершено (целевые объекты build).
-
-Построение успешно завершено.
-
-Затраченное время: 00:00:00.26
+﻿  ImageCompressor.cpp
+  ImageCompressor.vcxproj -> D:\My Programs\ImageCompressor\Debug\ImageCompressor.exe
