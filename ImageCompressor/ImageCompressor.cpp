@@ -1,125 +1,161 @@
 ﻿// ImageCompressor.cpp: определяет точку входа для консольного приложения.
 //
 
-#include "stdafx.h"
 #include "ImageCompressor.h"
 
 using namespace std;
 
+/*
+* author: Novitskiy Vladislav
+* group: 621701
+* description: Главная функция; в ней происходит ввод входных параметров сети и вызываются остальные функции
+*/
 int _tmain(int argc, _TCHAR* argv[])
 {
 	string filePath;
-	int rectHeight, rectWidth, overlap;
+	Image* image;
+
+	int imageWidth, imageHeight, rectHeight, rectWidth, overlap;
 
 	NeuralNetwork neuralNetwork;
 
-	cout << "Input file path: " << endl;
-	getline(cin, filePath, '\n');
+	try {
+		cout << "Input file path: " << endl;
+		getline(cin, filePath, '\n');
 
-	wstring widestr = wstring(filePath.begin(), filePath.end());
-	const wchar_t *filePath_t = widestr.c_str();
+		image = new Image(filePath.c_str());
 
-	CImage image;
+		if (image == NULL) {
+			throw "Error - Failed to open: " + filePath;
+		}
 
-	if (image.Load(filePath_t) == E_FAIL) {
-      cout << "Error - Failed to open: " + filePath << endl;
+		imageWidth = image->width();
+		imageHeight = image->height();
+	
+		cout << "Input rectangle width: ";
+		cin >> rectWidth;
 
-	  system("pause");
-      return 1;
-    }
+		if (rectWidth <= 0 || rectWidth > imageWidth) {
+			throw "Error - Invalid parameter: rectangle width";
+		}
 
-	//image.Save(_T("D:\\file.bmp"));
+		cout << "Input reactangle height: ";
+		cin >> rectHeight;
 
-	cout << "Input rectangle width: ";
-	cin >> rectWidth;
+		if (rectHeight <= 0 || rectHeight > imageHeight) {
+			throw "Error - Invalid parameter: rectangle height";
+		}
 
-	cout << "Input reactangle height: ";
-	cin >> rectHeight;
+		cout << "Input overlap: ";
+		cin >> overlap;
 
-	cout << "Input overlap: ";
-	cin >> overlap;
+		if (overlap < 0 || overlap >= rectWidth || overlap >= rectHeight
+			|| (imageWidth - overlap) % (rectWidth - overlap) != 0
+			|| (imageHeight - overlap) % (rectHeight - overlap) != 0) {
+			throw "Error - Invalid parameter: overlap";
+		}
 
-	cout << "Input neurons number at second layer (p <= 2 * N): ";
-	cin >> neuralNetwork.secondLayerNeuronsNumber;
+		cout << "Input neurons number at second layer (p <= 2 * N): ";
+		cin >> neuralNetwork.secondLayerNeuronsNumber;
 
-	cout << "Input coefficient of training at first layer (0 < a <= 0.01): ";
-	cin >> neuralNetwork.firstLayerTrainingCoefficient;
+		if (neuralNetwork.secondLayerNeuronsNumber <= 0) {
+			throw "Error - Invalid parameter: neurons number at second layer";
+		}
 
-	cout << "Input coefficient of training at second layer (0 < a' <= 0.01): ";
-	cin >> neuralNetwork.secondLayerTrainingCoefficient;
+		cout << "Input coefficient of training at first layer (0 < a <= 0.01): ";
+		cin >> neuralNetwork.firstLayerTrainingCoefficient;
 
-	cout << "Input maximum allowable error (0 < e <= 0.1 * p, a <= е): ";
-	cin >> neuralNetwork.maximumAllowableError;
+		if (neuralNetwork.firstLayerTrainingCoefficient <= 0 || neuralNetwork.firstLayerTrainingCoefficient > 1) {
+			throw "Error - Invalid parameter: coefficient of training at first layer";
+		}
 
-	neuralNetwork.trainingSample = sliceImage(image, rectWidth, rectHeight, overlap);
-	neuralNetwork.imagerysNumber = image.GetWidth() * image.GetHeight() / rectWidth / rectHeight;
+		cout << "Input coefficient of training at second layer (0 < a' <= 0.01): ";
+		cin >> neuralNetwork.secondLayerTrainingCoefficient;
+
+		if (neuralNetwork.secondLayerTrainingCoefficient <= 0 || neuralNetwork.secondLayerTrainingCoefficient > 1) {
+			throw "Error - Invalid parameter: coefficient of training at second layer";
+		}
+
+		cout << "Input maximum allowable error (0 < e <= 0.1 * p, a <= e): ";
+		cin >> neuralNetwork.maximumAllowableError;
+
+		if (neuralNetwork.secondLayerTrainingCoefficient <= 0) {
+			throw "Error - Invalid parameter: maximum allowable error";
+		}
+	}
+	catch (const char* mesage) {
+		cerr << mesage << endl;
+
+		system("pause");
+		return 1;
+	}
+
+	neuralNetwork.trainingSample = sliceImage(*image, rectWidth, rectHeight, overlap);
+
+	neuralNetwork.imagerysNumber = (imageWidth - overlap) / (rectWidth - overlap) * (imageHeight - overlap) / (rectHeight - overlap);
+
 	neuralNetwork.firstLayerNeuronsNumber = rectWidth * rectHeight * COLORS_NUMBER;
 
 	trainNeuralNetwork(neuralNetwork);
 
 	double** decompressedImageRectangles = compressAndDecompressImageRectangles(neuralNetwork);
 
-	CImage &decompressedImage = createDecompressedImage(decompressedImageRectangles, image.GetHeight(), image.GetWidth(), rectWidth, rectHeight, overlap, image.GetBPP());
+	saveDecompressedImage(decompressedImageRectangles, imageWidth, imageHeight, rectWidth, rectHeight, overlap);
 
-	if (decompressedImage.IsNull() || !decompressedImage.IsDIBSection()) {
-		cout << "Error - Image isn't drow" << endl;
-	}
-
-	if (decompressedImage.Save(_T("D:\\decompresedImage.bmp")) == E_FAIL) {
-      cout << "Error - Failed to save decompresed file" << endl;
-
-	  system("pause");
-      return 1;
-    }
+	cout << "Reached error: " << neuralNetwork.reachedError << endl;
+	cout << "Number of training steps: " << neuralNetwork.numberOfTrainingSteps << endl;
 
 	system("pause");
 	return 0;
 }
 
 
-double** sliceImage(CImage image, int rectWidth, int rectHeight, int overlap) {
-	int imageWidth = (int) image.GetWidth();
-	int imageHeight = (int) image.GetHeight();
+/*
+* author: Novitskiy Vladislav
+* group: 621701
+* description: Функция разбиения изображения на прямоугольники
+*/
+double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
+	int imageWidth = image.width();
+	int imageHeight = image.height();
 
-	int imagerysNumber = imageWidth * imageHeight / rectWidth / rectHeight;
+	int imagerysNumber = (imageWidth - overlap) / (rectWidth - overlap) * (imageHeight - overlap) / (rectHeight - overlap);
+	int imageryComponentsNumber = rectWidth * rectHeight * COLORS_NUMBER;
 
 	double** trainingSample = new double*[imagerysNumber];
+
 	int currImageryIndex = 0;
 
 	for (int currRectX = 0; currRectX < imageWidth; currRectX += rectWidth) {
-		if (imageWidth - currRectX - 1 < rectWidth) {
+		if (currRectX != 0) {
 			currRectX -= overlap;
 		}
 
-		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight, currImageryIndex++) {
-			if (imageHeight - currRectY - 1 < rectHeight) {
+		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight) {
+			if (currRectY != 0) {
 				currRectY -= overlap;
 			}
-
-			int imageryComponentsNumber = rectWidth * rectHeight * COLORS_NUMBER;
+			
 			trainingSample[currImageryIndex] = new double[imageryComponentsNumber];
 
 			int currImageryComponentIndex = 0;
 
-			// Цикл для создания эталонного вектора и преобразования его компонент для дальнейшей обработки 
 			for (int currPixelX = currRectX; currPixelX < currRectX + rectWidth; currPixelX++) {
 				
 				for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {
-					COLORREF color = image.GetPixel(currPixelX, currPixelY);
 
-					int pixelRedValue = GetRValue(color);
-					int pixelGreenValue = GetGValue(color);
-					int pixelBlueValue = GetBValue(color);
+					for (int currColorIndex = 0; currColorIndex < COLORS_NUMBER; currColorIndex++) {
+						int pixelcolorValue = image(currPixelX, currPixelY, Z_VALUE, currColorIndex);
 
-					double transformedPixelRedValue = (2 * pixelRedValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
-					double transformedpixelGreenValue = (2 * pixelGreenValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
-					double transformedpixelBlueValue = (2 * pixelBlueValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
+						double transformedPixelColorValue = (2 * pixelcolorValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
 
-					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedPixelRedValue;
-					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedpixelGreenValue;
-					trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedpixelBlueValue;
+						trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedPixelColorValue;
+
+					}
 				}
 			}
+
+			currImageryIndex++;
 		}
 	}
 
@@ -127,29 +163,35 @@ double** sliceImage(CImage image, int rectWidth, int rectHeight, int overlap) {
 }
 
 
+/*
+* author: Novitskiy Vladislav
+* group: 621701
+* description: Функция обучения линейной рециркуляционной нейронной сети
+*/
 void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 	double** q = neuralNetwork.trainingSample;
 	double** W = NULL;
 	double** Ws = NULL;
 
-	double* Yi;
-	double* Xdi;
+	double* Yi = NULL;
+	double* Xdi = NULL;
 
 	int imagerysNumber = neuralNetwork.imagerysNumber;
 	int N = neuralNetwork.firstLayerNeuronsNumber;
 	int p = neuralNetwork.secondLayerNeuronsNumber;
+	neuralNetwork.numberOfTrainingSteps = 0;
 
 	double a = neuralNetwork.firstLayerTrainingCoefficient;
 	double as = neuralNetwork.secondLayerTrainingCoefficient;
 	double e = neuralNetwork.maximumAllowableError;
 	double eForAverage = 2 * e;
 
-	long double RMSEforTrainingSample;
+	long double currError;
 
 	srand((unsigned int) time(0));
 
 	do {
-		RMSEforTrainingSample = 0;
+		currError = 0;
 
 		for (int currImageryIndex = 0; currImageryIndex < imagerysNumber; currImageryIndex++) {
 			double* Xi = neuralNetwork.trainingSample[currImageryIndex];
@@ -157,11 +199,6 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 			boolean isFirstStep = (W == NULL && Ws == NULL);
 
 			if (isFirstStep) {
-				/*
-				W = makeMatrixWithRandomValues(N, p);
-				Ws = transposeMatrix(W);
-				*/
-
 				double minWeight = -1;
 				double maxWeight = 1;
 
@@ -181,20 +218,6 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 					}
 				}
 			} else {
-				/*
-				Matrix &YiT = transposeMatrix(Yi);
-				Matrix &as_YiT = composeCoefficientAndMatrix(as, YiT);
-				Matrix &as_YiT_Xdi = composeMatrixes(as_YiT, Xdi);
-				Ws = subtractMatrixes(Ws, as_YiT_Xdi);
-
-				Matrix &XiT = transposeMatrix(Xi);
-				Matrix &a_XiT = composeCoefficientAndMatrix(a, XiT);
-				Matrix &WsT = transposeMatrix(Ws);
-				Matrix &Xdi_WsT = composeMatrixes(Xdi, WsT);
-				Matrix &a_XiT_Xdi_WsT = composeMatrixes(a_XiT, Xdi_WsT);
-				W = subtractMatrixes(W, a_XiT_Xdi_WsT);
-				*/
-
 				int currXdiCompNumber = 0;
 
 				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
@@ -211,12 +234,6 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 					}
 				}
 			}
-			
-			/*
-			Yi = composeMatrixes(Xi, W);
-			Matrix &Xis = composeMatrixes(Yi, Ws);
-			Xdi = subtractMatrixes(Xis, Xi);
-			*/
 
 			Yi = new double[p];
 
@@ -239,22 +256,30 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 
 				Xdi[currColNumber] -= Xi[currColNumber];
 
-				RMSEforTrainingSample += pow(Xdi[currColNumber], SQUARE);
+				currError += /*pow(Xdi[currColNumber], SQUARE)*/ Xdi[currColNumber] * Xdi[currColNumber];
 			}
 
-			//cout << RMSEforTrainingSample << endl;
+			//cout << currError << endl;
 		}
 
-		//cout << RMSEforTrainingSample << endl;
+		cout << currError << endl;
 
-	} while (RMSEforTrainingSample > eForAverage);
+		neuralNetwork.numberOfTrainingSteps++;
+
+	} while (currError > eForAverage);
 
 	neuralNetwork.currFirstLayerWeightMatrix = W;
 	neuralNetwork.currSecondLayerWeightMatrix = Ws;
+	neuralNetwork.reachedError = currError / 2;
 }
 
 
-double** compressAndDecompressImageRectangles(NeuralNetwork neuralNetwork) {
+/*
+* author: Novitskiy Vladislav
+* group: 621701
+* description: Функция сжатия и восстановления изображения
+*/
+double** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork) {
 	int imagerysNumber = neuralNetwork.imagerysNumber;
 	int N = neuralNetwork.firstLayerNeuronsNumber;
 	int p = neuralNetwork.secondLayerNeuronsNumber;
@@ -292,22 +317,26 @@ double** compressAndDecompressImageRectangles(NeuralNetwork neuralNetwork) {
 }
 
 
-CImage createDecompressedImage(double** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap, int nBPP) {
-	CImage decompressedImage;
+/*
+* author: Novitskiy Vladislav
+* group: 621701
+* description: Функция создания и сохранения изображения
+*/
+void saveDecompressedImage(double** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap) {
+	Image decompressedImage(imageWidth, imageHeight, ONE_DIMENSIONAL, COLORS_NUMBER);
+	decompressedImage.fill(0);
 
-	decompressedImage.Create(imageWidth, imageHeight, nBPP);
-
-	int imagerysNumber = imageWidth * imageHeight / rectWidth / rectHeight;
+	int imagerysNumber = (imageWidth - overlap) / (rectWidth - overlap) * (imageHeight - overlap) / (rectHeight - overlap);
 
 	int currImageryIndex = 0;
 	
 	for (int currRectX = 0; currRectX < imageWidth; currRectX += rectWidth) {
-		if (imageWidth - currRectX - 1 < rectWidth) {
+		if (currRectX != 0) {
 			currRectX -= overlap;
 		}
 
-		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight, currImageryIndex++) {
-			if (imageHeight - currRectY - 1 < rectHeight) {
+		for (int currRectY = 0; currRectY < imageHeight; currRectY += rectHeight) {
+			if (currRectY != 0) {
 				currRectY -= overlap;
 			}
 
@@ -316,49 +345,28 @@ CImage createDecompressedImage(double** decompressedImageRectangles, int imageWi
 			for (int currPixelX = currRectX; currPixelX < currRectX + rectWidth; currPixelX++) {
 
 				for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {				
-					double transformedPixelRedValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
-					double transformedPixelGreenValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
-					double transformedPixelBlueValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
 
-					int red = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelRedValue + 1) / 2);
-					int green = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelGreenValue + 1) / 2);
-					int blue = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelBlueValue + 1) / 2);
+					for (int currColorIndex = 0; currColorIndex < COLORS_NUMBER; currColorIndex++) {
+						double transformedPixelColorValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
 
-					if (red < PIXEL_COLOR_MIN_VALUE) {
-						red = PIXEL_COLOR_MIN_VALUE;
+						int color = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelColorValue + 1) / 2);
+
+						if (color < PIXEL_COLOR_MIN_VALUE) {
+							color = PIXEL_COLOR_MIN_VALUE;
+						}
+
+						if (color > PIXEL_COLOR_MAX_VALUE) {
+							color = PIXEL_COLOR_MAX_VALUE;
+						}
+
+						decompressedImage(currPixelX, currPixelY, Z_VALUE, currColorIndex) = color;
 					}
-
-					if (red > PIXEL_COLOR_MAX_VALUE) {
-						red = PIXEL_COLOR_MAX_VALUE;
-					}
-
-					if (green < PIXEL_COLOR_MIN_VALUE) {
-						green = PIXEL_COLOR_MIN_VALUE;
-					}
-
-					if (green > PIXEL_COLOR_MAX_VALUE) {
-						green = PIXEL_COLOR_MAX_VALUE;
-					}
-
-					if (blue < PIXEL_COLOR_MIN_VALUE) {
-						blue = PIXEL_COLOR_MIN_VALUE;
-					}
-
-					if (blue > PIXEL_COLOR_MAX_VALUE) {
-						blue = PIXEL_COLOR_MAX_VALUE;
-					}
-
-					COLORREF color = RGB(red, green, blue);
-
-					decompressedImage.SetPixel(currPixelX, currPixelY, color);
-
-					//cout << (int) GetRValue(decompressedImage.GetPixel(currPixelX, currPixelY)) << endl;
-
-					//cout << "X: " << currPixelX << "\tY: " << currPixelY << endl;
 				}
 			}
+
+			currImageryIndex++;
 		}
 	}
 
-	return decompressedImage;
+	decompressedImage.save_bmp("decompresedImage.bmp");
 }
