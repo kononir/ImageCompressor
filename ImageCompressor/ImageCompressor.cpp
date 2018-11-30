@@ -150,7 +150,6 @@ double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
 						double transformedPixelColorValue = (2 * pixelcolorValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
 
 						trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedPixelColorValue;
-
 					}
 				}
 			}
@@ -169,73 +168,48 @@ double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
 * description: Функция обучения линейной рециркуляционной нейронной сети
 */
 void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
-	double** q = neuralNetwork.trainingSample;
-	double** W = NULL;
-	double** Ws = NULL;
-
-	double* Yi = NULL;
-	double* Xdi = NULL;
-
-	int imagerysNumber = neuralNetwork.imagerysNumber;
+	int L = neuralNetwork.imagerysNumber;
 	int N = neuralNetwork.firstLayerNeuronsNumber;
 	int p = neuralNetwork.secondLayerNeuronsNumber;
-	neuralNetwork.numberOfTrainingSteps = 0;
+	int numOfSteps = 0;
 
 	double a = neuralNetwork.firstLayerTrainingCoefficient;
 	double as = neuralNetwork.secondLayerTrainingCoefficient;
-	double e = neuralNetwork.maximumAllowableError;
-	double eForAverage = 2 * e;
+	double eForAverage = 2 * neuralNetwork.maximumAllowableError;
+	double minWeight = -1;
+	double maxWeight = 1;
 
 	long double currError;
+	
+	double* Xi;
+	double* XdiWs = new double[p];
+	double* Yi = new double[p];
+	double* Xdi = new double[N];
 
-	srand((unsigned int) time(0));
+	double** X = neuralNetwork.trainingSample;
+
+	double** W = new double*[N];
+	for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+		W[currRowNumber] = new double[p];
+	}
+
+	double** Ws = new double*[p];
+	for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+		Ws[currRowNumber] = new double[N];
+	}
+
+	srand((unsigned int)time(0));
+
+	for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+		for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+			W[currRowNumber][currColNumber] = Ws[currColNumber][currRowNumber]
+				= (((double)rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight;
+		}
+	}
 
 	do {
-		currError = 0;
-
-		for (int currImageryIndex = 0; currImageryIndex < imagerysNumber; currImageryIndex++) {
-			double* Xi = neuralNetwork.trainingSample[currImageryIndex];
-
-			boolean isFirstStep = (W == NULL && Ws == NULL);
-
-			if (isFirstStep) {
-				double minWeight = -1;
-				double maxWeight = 1;
-
-				W = new double*[N];
-				Ws = new double*[p];
-
-				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
-					W[currRowNumber] = new double[p];
-					
-					for (int currColNumber = 0; currColNumber < p; currColNumber++) {
-						if (currRowNumber == 0) {
-							Ws[currColNumber] = new double[N];
-						}
-
-						W[currRowNumber][currColNumber] = Ws[currColNumber][currRowNumber] 
-							= (((double) rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight;
-					}
-				}
-			} else {
-				int currXdiCompNumber = 0;
-
-				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
-					for (int currColNumber = 0; currColNumber < p; currColNumber++) {
-						for (int currWCompNumber = 0; currWCompNumber < N; currWCompNumber++) {
-							W[currRowNumber][currColNumber] -= a * Xi[currRowNumber] * Xdi[currWCompNumber] * Ws[currColNumber][currWCompNumber];
-						}
-					}
-				}
-
-				for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
-					for (int currColNumber = 0; currColNumber < N; currColNumber++) {
-						Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
-					}
-				}
-			}
-
-			Yi = new double[p];
+		for (int currImageryIndex = 0; currImageryIndex < L; currImageryIndex++) {
+			Xi = X[currImageryIndex];
 
 			for (int currColNumber = 0; currColNumber < p; currColNumber++) {
 				Yi[currColNumber] = 0;
@@ -245,7 +219,60 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 				}
 			}
 
-			Xdi = new double[N];
+			for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+				Xdi[currColNumber] = 0;
+
+				for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+					Xdi[currColNumber] += Yi[currRowNumber] * Ws[currRowNumber][currColNumber];
+				}
+
+				Xdi[currColNumber] -= Xi[currColNumber];
+			}
+
+			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+				XdiWs[currRowNumber] = 0;
+
+				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+					XdiWs[currRowNumber] += Xdi[currColNumber] * Ws[currRowNumber][currColNumber];
+				}
+			}
+
+			for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+				for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+					W[currRowNumber][currColNumber] -= a * Xi[currRowNumber] * XdiWs[currColNumber];
+				}
+			}
+
+			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+					Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
+				}
+			}
+
+			/*
+			// можно вычислить матрицы в одном цикле, но это не даёт видимого прироста
+
+			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+					Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
+
+					W[currColNumber][currRowNumber] -= a * Xi[currColNumber] * XdiWs[currRowNumber];
+				}
+			}*/
+		}
+
+		currError = 0;
+
+		for (int currImageryIndex = 0; currImageryIndex < L; currImageryIndex++) {
+			Xi = X[currImageryIndex];
+
+			for (int currColNumber = 0; currColNumber < p; currColNumber++) {
+				Yi[currColNumber] = 0;
+
+				for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
+					Yi[currColNumber] += Xi[currRowNumber] * W[currRowNumber][currColNumber];
+				}
+			}
 
 			for (int currColNumber = 0; currColNumber < N; currColNumber++) {
 				Xdi[currColNumber] = 0;
@@ -255,22 +282,27 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 				}
 
 				Xdi[currColNumber] -= Xi[currColNumber];
-
-				currError += /*pow(Xdi[currColNumber], SQUARE)*/ Xdi[currColNumber] * Xdi[currColNumber];
 			}
 
-			//cout << currError << endl;
+			for (int currImageryComponentIndex = 0; currImageryComponentIndex < N; currImageryComponentIndex++) {
+				currError += Xdi[currImageryComponentIndex] * Xdi[currImageryComponentIndex];
+			}
 		}
 
 		cout << currError << endl;
 
-		neuralNetwork.numberOfTrainingSteps++;
+		numOfSteps++;
 
 	} while (currError > eForAverage);
 
+	neuralNetwork.numberOfTrainingSteps = numOfSteps;
 	neuralNetwork.currFirstLayerWeightMatrix = W;
 	neuralNetwork.currSecondLayerWeightMatrix = Ws;
 	neuralNetwork.reachedError = currError / 2;
+
+	delete[] XdiWs;
+	delete[] Yi;
+	delete[] Xdi;
 }
 
 

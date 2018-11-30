@@ -5,7 +5,6 @@
 #include <iostream>
 #include <string>
 #include <ctime>
-#include <math.h>
 #include <tchar.h>
 #include <Windows.h>
 
