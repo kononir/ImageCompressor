@@ -5,12 +5,11 @@
 #include <iostream>
 #include <string>
 #include <ctime>
-#include <tchar.h>
 #include <Windows.h>
 
 /*
 * Подключение библиотеки CImg для работы с изображениями
-* Библиотека была загружена по ссылке https://framagit.org/dtschump/CImg/tree/v.2.4.1
+* Ссылка на используемую библиотеку: https://framagit.org/dtschump/CImg/tree/v.2.4.1
 */
 #include "CImg-2.4.1/CImg.h"
 
@@ -25,22 +24,22 @@ typedef cimg_library::CImg<unsigned char> Image;
 
 typedef struct NeuralNetwork 
 {
-	double** trainingSample;
-	double** currFirstLayerWeightMatrix;
-	double** currSecondLayerWeightMatrix;
+	float** trainingSample;
+	float** currFirstLayerWeightMatrix;
+	float** currSecondLayerWeightMatrix;
 
 	int imagerysNumber;
 	int firstLayerNeuronsNumber;
 	int secondLayerNeuronsNumber;
 	int numberOfTrainingSteps;
 
-	double firstLayerTrainingCoefficient;
-	double secondLayerTrainingCoefficient;
-	double maximumAllowableError;
-	double reachedError;
+	float firstLayerTrainingCoefficient;
+	float secondLayerTrainingCoefficient;
+	float maximumAllowableError;
+	float reachedError;
 } NeuralNetwork;
 
-double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap);
-double** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork);
-void saveDecompressedImage(double** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap);
+float** sliceImage(Image image, int rectWidth, int rectHeight, int overlap);
+float** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork);
+void saveDecompressedImage(float** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap);
 void trainNeuralNetwork(NeuralNetwork &neuralNetwork);

@@ -98,7 +98,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	trainNeuralNetwork(neuralNetwork);
 
-	double** decompressedImageRectangles = compressAndDecompressImageRectangles(neuralNetwork);
+	float** decompressedImageRectangles = compressAndDecompressImageRectangles(neuralNetwork);
 
 	saveDecompressedImage(decompressedImageRectangles, imageWidth, imageHeight, rectWidth, rectHeight, overlap);
 
@@ -115,14 +115,14 @@ int _tmain(int argc, _TCHAR* argv[])
 * group: 621701
 * description: Функция разбиения изображения на прямоугольники
 */
-double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
+float** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
 	int imageWidth = image.width();
 	int imageHeight = image.height();
 
 	int imagerysNumber = (imageWidth - overlap) / (rectWidth - overlap) * (imageHeight - overlap) / (rectHeight - overlap);
 	int imageryComponentsNumber = rectWidth * rectHeight * COLORS_NUMBER;
 
-	double** trainingSample = new double*[imagerysNumber];
+	float** trainingSample = new float*[imagerysNumber];
 
 	int currImageryIndex = 0;
 
@@ -136,7 +136,7 @@ double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
 				currRectY -= overlap;
 			}
 			
-			trainingSample[currImageryIndex] = new double[imageryComponentsNumber];
+			trainingSample[currImageryIndex] = new float[imageryComponentsNumber];
 
 			int currImageryComponentIndex = 0;
 
@@ -147,7 +147,7 @@ double** sliceImage(Image image, int rectWidth, int rectHeight, int overlap) {
 					for (int currColorIndex = 0; currColorIndex < COLORS_NUMBER; currColorIndex++) {
 						int pixelcolorValue = image(currPixelX, currPixelY, Z_VALUE, currColorIndex);
 
-						double transformedPixelColorValue = (2 * pixelcolorValue / (double)PIXEL_COLOR_MAX_VALUE) - 1;
+						float transformedPixelColorValue = (2 * pixelcolorValue / (float)PIXEL_COLOR_MAX_VALUE) - 1;
 
 						trainingSample[currImageryIndex][currImageryComponentIndex++] = transformedPixelColorValue;
 					}
@@ -173,29 +173,29 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 	int p = neuralNetwork.secondLayerNeuronsNumber;
 	int numOfSteps = 0;
 
-	double a = neuralNetwork.firstLayerTrainingCoefficient;
-	double as = neuralNetwork.secondLayerTrainingCoefficient;
-	double eForAverage = 2 * neuralNetwork.maximumAllowableError;
-	double minWeight = -1;
-	double maxWeight = 1;
+	float a = neuralNetwork.firstLayerTrainingCoefficient;
+	float as = neuralNetwork.secondLayerTrainingCoefficient;
+	float eForAverage = 2 * neuralNetwork.maximumAllowableError;
+	float minWeight = -0.1;
+	float maxWeight = 0.1;
 
 	long double currError;
 	
-	double* Xi;
-	double* XdiWs = new double[p];
-	double* Yi = new double[p];
-	double* Xdi = new double[N];
+	float* Xi;
+	float* XdiWs = new float[p];
+	float* Yi = new float[p];
+	float* Xdi = new float[N];
 
-	double** X = neuralNetwork.trainingSample;
+	float** X = neuralNetwork.trainingSample;
 
-	double** W = new double*[N];
+	float** W = new float*[N];
 	for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
-		W[currRowNumber] = new double[p];
+		W[currRowNumber] = new float[p];
 	}
 
-	double** Ws = new double*[p];
+	float** Ws = new float*[p];
 	for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
-		Ws[currRowNumber] = new double[N];
+		Ws[currRowNumber] = new float[N];
 	}
 
 	srand((unsigned int)time(0));
@@ -203,7 +203,7 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 	for (int currRowNumber = 0; currRowNumber < N; currRowNumber++) {
 		for (int currColNumber = 0; currColNumber < p; currColNumber++) {
 			W[currRowNumber][currColNumber] = Ws[currColNumber][currRowNumber]
-				= (((double)rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight;
+				= (((float)rand() / RAND_MAX) * (maxWeight - minWeight)) + minWeight;
 		}
 	}
 
@@ -230,6 +230,12 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 			}
 
 			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
+				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
+					Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
+				}
+			}
+
+			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
 				XdiWs[currRowNumber] = 0;
 
 				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
@@ -242,23 +248,6 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 					W[currRowNumber][currColNumber] -= a * Xi[currRowNumber] * XdiWs[currColNumber];
 				}
 			}
-
-			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
-				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
-					Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
-				}
-			}
-
-			/*
-			// можно вычислить матрицы в одном цикле, но это не даёт видимого прироста
-
-			for (int currRowNumber = 0; currRowNumber < p; currRowNumber++) {
-				for (int currColNumber = 0; currColNumber < N; currColNumber++) {
-					Ws[currRowNumber][currColNumber] -= as * Yi[currRowNumber] * Xdi[currColNumber];
-
-					W[currColNumber][currRowNumber] -= a * Xi[currColNumber] * XdiWs[currRowNumber];
-				}
-			}*/
 		}
 
 		currError = 0;
@@ -289,7 +278,7 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 			}
 		}
 
-		cout << currError << endl;
+		cout /*<< "            " << "\r"*/ << currError << "\r";
 
 		numOfSteps++;
 
@@ -311,20 +300,20 @@ void trainNeuralNetwork(NeuralNetwork &neuralNetwork) {
 * group: 621701
 * description: Функция сжатия и восстановления изображения
 */
-double** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork) {
+float** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork) {
 	int imagerysNumber = neuralNetwork.imagerysNumber;
 	int N = neuralNetwork.firstLayerNeuronsNumber;
 	int p = neuralNetwork.secondLayerNeuronsNumber;
 
-	double** W = neuralNetwork.currFirstLayerWeightMatrix;
-	double** Ws = neuralNetwork.currSecondLayerWeightMatrix;
+	float** W = neuralNetwork.currFirstLayerWeightMatrix;
+	float** Ws = neuralNetwork.currSecondLayerWeightMatrix;
 
-	double** decompressImageRectangles = new double*[imagerysNumber];
+	float** decompressImageRectangles = new float*[imagerysNumber];
 	
 	for (int currImageryIndex = 0; currImageryIndex < imagerysNumber; currImageryIndex++) {
-		double* Xi = neuralNetwork.trainingSample[currImageryIndex];
+		float* Xi = neuralNetwork.trainingSample[currImageryIndex];
 
-		double* Yi = new double[p];
+		float* Yi = new float[p];
 
 		for (int currColNumber = 0; currColNumber < p; currColNumber++) {
 			Yi[currColNumber] = 0;
@@ -334,7 +323,7 @@ double** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork) {
 			}
 		}
 
-		decompressImageRectangles[currImageryIndex] = new double[N];
+		decompressImageRectangles[currImageryIndex] = new float[N];
 
 		for (int currColNumber = 0; currColNumber < N; currColNumber++) {
 			decompressImageRectangles[currImageryIndex][currColNumber] = 0;
@@ -354,7 +343,7 @@ double** compressAndDecompressImageRectangles(NeuralNetwork &neuralNetwork) {
 * group: 621701
 * description: Функция создания и сохранения изображения
 */
-void saveDecompressedImage(double** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap) {
+void saveDecompressedImage(float** decompressedImageRectangles, int imageWidth, int imageHeight, int rectWidth, int rectHeight, int overlap) {
 	Image decompressedImage(imageWidth, imageHeight, ONE_DIMENSIONAL, COLORS_NUMBER);
 	decompressedImage.fill(0);
 
@@ -379,7 +368,7 @@ void saveDecompressedImage(double** decompressedImageRectangles, int imageWidth,
 				for (int currPixelY = currRectY; currPixelY < currRectY + rectHeight; currPixelY++) {				
 
 					for (int currColorIndex = 0; currColorIndex < COLORS_NUMBER; currColorIndex++) {
-						double transformedPixelColorValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
+						float transformedPixelColorValue = decompressedImageRectangles[currImageryIndex][currImageryComponentIndex++];
 
 						int color = (int)(PIXEL_COLOR_MAX_VALUE * (transformedPixelColorValue + 1) / 2);
 
